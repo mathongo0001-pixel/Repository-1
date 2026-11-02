@@ -79,13 +79,15 @@ SYMBOLS = ["🍎", "🐶", "🌸", "⭐", "🚗", "🎈"]
 @st.cache_data(show_spinner=False)
 def speak(text: str, lang_code: str) -> bytes:
     client = SarvamAI(api_subscription_key=get_key())
-    response = client.text_to_speech.convert(
-        text=text,
-        target_language_code=lang_code,
-        model="bulbul:v3",
-        speaker="shubh",
-    )
-    return base64.b64decode("".join(response.audios))
+    common = dict(text=text, model="bulbul:v3", speaker="shubh")
+    try:
+        response = client.text_to_speech.convert(target_language_code=lang_code, **common)
+    except TypeError:  # some SDK versions name this parameter differently
+        response = client.text_to_speech.convert(language_code=lang_code, **common)
+    audios = getattr(response, "audios", None) or getattr(response, "audio", None)
+    if isinstance(audios, str):
+        audios = [audios]
+    return base64.b64decode("".join(audios))
 
 
 # ---------- Game state ----------
@@ -133,6 +135,10 @@ h1 { font-size: 2.6rem !important; color: #0B2545; }
     height: 120px; border-radius: 16px; border: 5px solid #0B2545; opacity: 1;
 }
 [class*="st-key-down_"] button { background: #0B2545; }
+[class*="st-key-down_"] button:hover, [class*="st-key-down_"] button:focus,
+[class*="st-key-down_"] button:active { background: #1D4F91; border-color: #0B2545; }
+[class*="st-key-down_"] button:hover p, [class*="st-key-down_"] button:focus p,
+[class*="st-key-down_"] button:active p { color: #FFFFFF; }
 [class*="st-key-up_"] button { background: #FFFFFF; }
 [class*="st-key-done_"] button, [class*="st-key-done_"] button:disabled {
     background: #D8F3DC; border-color: #1B7F3B;
@@ -200,8 +206,8 @@ if s.say:
         else:
             try:
                 st.audio(speak(phrase, lang), format="audio/wav", autoplay=True)
-            except Exception:
-                st.caption(t["novoice"])
+            except Exception as e:
+                st.caption(f'{t["novoice"]} [{type(e).__name__}: {str(e)[:300]}]')
 
 st.divider()
 st.button(t["new"], key="newgame", on_click=new_game, use_container_width=True)
